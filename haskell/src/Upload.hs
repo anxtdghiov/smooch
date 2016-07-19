@@ -1,76 +1,72 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RecordWildCards   #-}
 
 module Upload where
 
-import qualified Web.Scotty as S 
+import           Network.Wai.Parse
 
-import Network.Wai.Parse
+import qualified Data.ByteString.Char8      as BS
+import qualified Data.ByteString.Lazy       as B
+import           Data.Text                  (Text)
+import qualified Data.Text                  as T
 
-import qualified Data.ByteString.Lazy as B
-import qualified Data.ByteString.Char8 as BS
-import qualified Data.Text.Lazy as LT
-import qualified Data.Text as T
+import           System.Directory
+import           System.FilePath            (takeBaseName, takeExtension, (</>))
 
-import System.FilePath ((</>), takeBaseName, takeExtension)
-import System.Directory
-import System.Exit
+import           Control.Exception
+import           Control.Monad.IO.Class     (liftIO)
+import           Control.Monad.Trans.Either
+import           Data.Monoid                ((<>))
 
-import Control.Monad.Trans.Either
-import Control.Exception
-import Control.Monad.IO.Class (liftIO)
-import Data.Monoid ((<>))
+import           Data.Aeson.Encode          (encode)
+import           Kiss
+import           ParseCNF
+import           Shell
 
-import KissSet
-
-import ParseCNF
-import Kiss
-import Shell
-import Data.Aeson.Encode (encode) 
-
-processSet :: [S.File] -> EitherT T.Text IO [KissCell]
-processSet files = do
-  file <- getFile files
-  let fileName = fst file
-  let fileContents = snd file
-  let staticDir = "static/sets/" <> takeBaseName fileName
-  tryIO $ B.writeFile ("static/sets" </> fileName) fileContents
-  tryIO $ createDirectoryIfMissing ("create parents" == "false") staticDir
-  unzipFile fileName staticDir
+processSet :: (FilePath, B.ByteString) -> EitherT Text IO [KissCell]
+processSet (fName, fileContents) = do
+  liftIO $ putStrLn "Hello again"
+  let staticDir = "static/sets/" <> takeBaseName fName
+  tryIO $ B.writeFile ("static/sets" </> fName) fileContents
+  exists <- liftIO $ doesFileExist $ "static/set" </> fName
+  liftIO $ putStrLn $ "static/sets" </> fName <> " exists? " <>
+    show exists
+  let createParents = True
+  tryIO $ createDirectoryIfMissing createParents staticDir
+  unzipFile fName staticDir
   cnf <- getCNF staticDir
   kissData <- getKissData cnf
-  let json = "var kissJson = " <> encode kissData
-  kissCels <- getKissCels cnf
-  -- just using first palette found for now
+  celData <- getKissCels cnf
   kissPalette <- getKissPalette kissData
+  celsWithOffsets <- convertCels kissPalette (map cnfCelName celData) staticDir
+  let realCelData = addOffsetsToCelData celsWithOffsets celData
+  let json = "var kissJson = " <> encode kissData <> ";\n" <>
+             "var celJson = " <> encode realCelData <> ";\n"
+  -- just using first palette found for now
   tryIO $ B.writeFile (staticDir <> "/setdata.js") json
-  convertCels kissPalette (map celName kissCels) staticDir
-  return kissCels
+  return realCelData
 
-tryIO :: IO () -> EitherT T.Text IO ()
+addOffsetsToCelData :: [(String, (Int, Int))] -> [CNFKissCell] ->
+                       [KissCell]
+addOffsetsToCelData offsets cells =
+  [ KissCell cnfCelFix cnfCelName cnfCelPalOffset cnfCelSets cnfCelAlpha (Position xoff yoff)
+     | cell@CNFKissCell{..} <- cells, offset@(_, (xoff, yoff)) <- offsets, cnfCelName == fst offset]
+
+tryIO :: IO () -> EitherT Text IO ()
 tryIO f = do
   result <-liftIO (try f :: IO (Either IOException ()))
   case result of
     Right () -> return ()
     Left ex  -> EitherT $ return $ Left (T.pack $ show ex)
-   
 
-getFile :: [S.File] -> EitherT T.Text IO (String, B.ByteString)
-getFile files = EitherT $ return $
-  case files of 
-    [(_, b)]  -> Right (BS.unpack (fileName b), fileContent b)
-    otherwise -> Left "Please upload exactly one file."
-
-getRelDir :: [S.File] -> EitherT T.Text IO FilePath
-getRelDir files = do
-  file <- getFile files
-  let fileName = fst file
-  return $ "sets/" ++ takeBaseName fileName
+getRelDir :: (FilePath, B.ByteString) -> EitherT Text IO FilePath
+getRelDir (fName, _) = return $ "sets" </> takeBaseName fName
 
 -- for now, only looks at first cnf listed
-getCNF :: FilePath -> EitherT T.Text IO String
+getCNF :: FilePath -> EitherT Text IO String
 getCNF dir = do
   files <- liftIO $ getDirectoryContents dir
-  let cnfs = filter (\x -> takeExtension x == ".cnf") files 
+  let cnfs = filter (\x -> takeExtension x == ".cnf") files
   case cnfs of
-    (x:xs)    -> liftIO $ readFile $ dir </> x
-    otherwise -> EitherT $ return $ Left "No configuration file found."
+    (x:_xs)     -> liftIO $ readFile $ dir </> x
+    _otherwise -> EitherT $ return $ Left "No configuration file found."

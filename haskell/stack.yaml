@@ -1,5 +1,10 @@
-extra-deps: []
-resolver: lts-2.20
 flags: {}
 packages:
 - '.'
+extra-deps:
+- fn-0.3.0.1
+- fn-extra-0.3.0.1
+- http-accept-0.2
+- wai-util-0.8
+- logging-3.0.2
+resolver: lts-5.15

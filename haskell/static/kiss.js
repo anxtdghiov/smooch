@@ -7,10 +7,11 @@
     // This controls dragging and dropping.
     this.mouse = Mouser(); 
 
+    /*
     this.editMode = false;
 
     var editButton = document.getElementById("editbutton");
-
+    
     var that = this;
     editButton.addEventListener("click", function() {
       if (that.editMode == true) {
@@ -23,10 +24,13 @@
     });
 
     this.toolbar = document.getElementById("toolbar");
-
+    */
+    
     // The color of area around the play set.
     this.borderarea = document.getElementById("borderarea");
     borderarea.style.background = "pink";
+    borderarea.style.width="90%";`
+    borderarea.style.overflow = "auto";
     
     this.set = new KissSet(kissdata);
 
@@ -36,6 +40,8 @@
 
   Smooch.prototype = {
     update: function() {
+
+      /*
       if (this.editMode == true) {
         this.toolbar.style.display = "block";
         this.borderarea.style.width = "80%";
@@ -43,16 +49,8 @@
       else {
         this.toolbar.style.display = "none";
         this.borderarea.style.width = "100%";
-      }
+      }*/
     }
-  };
-
-  var Toolbox = function () {
-
-    var infobox = document.getElementById("info");
-    
-    infobox.innerHTML = dobj.name;
-
   };
 
   var KissSet = function(kissData) {
@@ -84,6 +82,8 @@
       }
       this.cells = this.cells.concat(cells);
     }
+
+    this.cells.reverse();
 
     // Add click events to set numbers 
     this.sets = document.getElementsByTagName("a");
