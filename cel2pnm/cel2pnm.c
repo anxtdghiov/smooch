@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 unsigned char palette[256 * 3] =  {
    0, 0, 0,       0, 0, 80,      0, 0, 160,     0, 0, 255,     0, 32, 0,
@@ -81,19 +82,19 @@ static int convert_cel(const char *celfile, const char *pnmfile) {
     fpcel = fopen(celfile, "r");
     if (!fpcel) {
         perror(celfile);
-        return -1;
+        return EXIT_FAILURE;
     }
 
     n_read = fread(header, 4, 1, fpcel);
     if (n_read < 1) {
-        fprintf(stderr, "Unable to read header.\n");
-        return -1;
+        fputs("Unable to read header.\n", stderr);
+        return EXIT_FAILURE;
     }
 
     if (strncmp ((const char *) header, "KiSS", 4)) {
         // if the header does NOT start with KiSS
         if (debug) {
-            fprintf(stderr, "Old style KiSS cell.\n");
+            fputs("Old style KiSS cell.\n", stderr);
         }
         bpp    = 4;
         width  = parse_uint16(header+0);
@@ -104,14 +105,14 @@ static int convert_cel(const char *celfile, const char *pnmfile) {
     else {
         n_read = fread(header, 28, 1, fpcel);
         if (n_read < 1) {
-            fprintf(stderr, "Unable to read rest of header.\n");
-            return -1;
+            fputs("Unable to read rest of header.\n", stderr);
+            return EXIT_FAILURE;
         }
 
         file_mark = header[0];
         if (file_mark != 0x20 && file_mark != 0x21) {
             fprintf(stderr, "%s is not a CEL image file.\n", celfile);
-            return -1;
+            return EXIT_FAILURE;
         }
 
         bpp    = header[1];
@@ -132,15 +133,15 @@ static int convert_cel(const char *celfile, const char *pnmfile) {
     }
 
     if (width < 0 || height < 0) {
-        fprintf(stderr, "Invalid width or height.");
-        return -1;
+        fputs("Invalid width or height.", stderr);
+        return EXIT_FAILURE;
     }
 
     // open fppnm stream
     fppnm = fopen(pnmfile, "w+");
     if (!fppnm) {
         perror(pnmfile);
-        return -1;
+        return EXIT_FAILURE;
     }
     // write header
     fprintf(fppnm, "P3\n");
@@ -152,7 +153,7 @@ static int convert_cel(const char *celfile, const char *pnmfile) {
         fppgm = fopen("out.pgm", "w+");
         if (!fppgm) {
             perror("out.pgm");
-            return -1;
+            return EXIT_FAILURE;
         }
         fprintf(fppgm, "P5\n");
         fprintf(fppgm, "%d %d\n", width, height);
@@ -175,7 +176,7 @@ static int convert_cel(const char *celfile, const char *pnmfile) {
                     if (n_read < 1) {
                         fprintf(stderr,
                                 "Error reading pixels at row %d, column %d\n", i, j);
-                        return -1;
+                        return EXIT_FAILURE;
                     }
 
                     // split the byte into two numbers
@@ -221,7 +222,7 @@ static int convert_cel(const char *celfile, const char *pnmfile) {
                     if (n_read < 1) {
                         fprintf(stderr,
                                 "Error reading pixels at row %d, column %d\n", i, j);
-                        return -1;
+                        return EXIT_FAILURE;
                     }
                     // convert the byte to an int
                     int num;
@@ -245,7 +246,7 @@ static int convert_cel(const char *celfile, const char *pnmfile) {
                 if (n_read < 1) {
                     fprintf(stderr,
                             "Error reading pixels at row %d, column %d\n", i, j);
-                    return -1;
+                    return EXIT_FAILURE;
                 }
 
                 for (j = 0; j < width; j++) {
@@ -276,7 +277,7 @@ static int convert_cel(const char *celfile, const char *pnmfile) {
         }
         // end the row with a newline
         if (debug > 1) {
-            fprintf(stderr, " \n");
+            fputs(" \n", stderr);
         }
         fprintf(fppnm, "\n");
     }
@@ -284,7 +285,7 @@ static int convert_cel(const char *celfile, const char *pnmfile) {
     fclose(fpcel);
     fclose(fppnm);
 
-    return 0;
+    return EXIT_SUCCESS;
 }
 
 static int read_palette(const char *palfile) {
@@ -300,18 +301,18 @@ static int read_palette(const char *palfile) {
     fppal = fopen(palfile, "r");
     if (!fppal) {
         perror(palfile);
-        return -1;
+        return EXIT_FAILURE;
     }
 
     n_read = fread(header, 4, 1, fppal);
     if (n_read < 1) {
-        fprintf(stderr, "Bad palette header.\n");
-        return -1;
+        fputs("Bad palette header.\n", stderr);
+        return EXIT_FAILURE;
     }
 
     if (strncmp ((const char *) header, "KiSS", 4)) {
         if (debug) {
-            fprintf(stderr, "Old style palette\n");
+            fputs("Old style palette\n", stderr);
         }
 
         colors = 16;
@@ -326,8 +327,8 @@ static int read_palette(const char *palfile) {
         for (i = 0; i < colors; i++) {
             n_read = fread(buffer, 1, 2, fppal);
             if (n_read < 2) {
-                fprintf(stderr, "Error reading palette.");
-                return -1;
+                fputs("Error reading palette.", stderr);
+                return EXIT_FAILURE;
             }
 
             palette[i*3+0] =  buffer[0] & 0xf0;
@@ -336,17 +337,17 @@ static int read_palette(const char *palfile) {
         }
     }
     else {
-        fprintf(stderr, "New style palette\n");
+        fputs("New style palette\n", stderr);
 
         n_read = fread(header+4, 28, 1, fppal);
         if (n_read < 1) {
-            fprintf(stderr, "Can't read palette header after \"KiSS\".\n");
+            fputs("Can't read palette header after \"KiSS\".\n", stderr);
         }
 
         file_mark = header[4];
         if (file_mark != 0x10) {
             fprintf(stderr, "Filemark should be %c and is actually %c.\n", 0x10, file_mark);
-            return -1;
+            return EXIT_FAILURE;
         }
 
         bpp = header[5];
@@ -364,8 +365,8 @@ static int read_palette(const char *palfile) {
                     // read two bytes into the buffer
                     n_read = fread(buffer, 1, 2, fppal);
                     if (n_read < 2) {
-                        fprintf(stderr, "Error while reading palette.");
-                        return -1;
+                        fputs("Error while reading palette.", stderr);
+                        return EXIT_FAILURE;
                     }
 
                     // three colors are stored in two bytes
@@ -382,13 +383,13 @@ static int read_palette(const char *palfile) {
                 // and stores it in palette
                 n_read = fread(palette, 3, colors, fppal);
                 if (n_read < colors) {
-                    fprintf(stderr, "Error while reading palette.");
-                    return -1;
+                    fputs("Error while reading palette.", stderr);
+                    return EXIT_FAILURE;
                 }
                 break;
             default:
                 fprintf(stderr, "Invalid bits-per-pixel of %d", bpp);
-                return -1;
+                return EXIT_FAILURE;
         }
     }
 
@@ -398,65 +399,55 @@ static int read_palette(const char *palfile) {
 
     fclose(fppal);
 
-    return 0;
+    return EXIT_SUCCESS;
 }
 
-
 int main (int argc, char *argv[]) {
-    int err;
-
-    char *input_file;
-    char *palette_file;
-    char *output_file;
-
-    if (strcmp(argv[1], "-t") == 0) {
-        palette_file = argv[2];
-        fprintf(stderr,"Read palette %s \n", palette_file);
-        err = read_palette (palette_file);
-        if (err) return 1;
-        fprintf(stdout, "%s", transparent);
-        return 0;
-    }
-
-    int ap = 1; // arg pointer
-
+    int opt, read_transparent = 0, err = EXIT_SUCCESS;
     debug = 0;
-    output_offset = 0;
 
-    if (ap < argc && strncmp(argv[ap], "-d", 2) == 0) {
-        if (strncmp(argv[ap], "-d2", 3) == 0) {
-            debug = 2;
+    char *palette_file = NULL;
+
+    while ((opt = getopt(argc, argv, "td")) != -1) {
+
+        switch (opt) {
+            case 't': read_transparent = 1; break;
+            case 'd': ++debug; break;
+            default: goto err;
         }
-        else {
-            debug = 1;
+    }
+    opt = optind + (read_transparent ? 1 : 3);
+    if (opt != argc) {
+        if (argc < opt) {
+            err = argc - opt;
+            goto err;
         }
-        ++ap;
+        while(opt < argc)
+            fprintf(stderr, "Ignoring extra argument %s\n", argv[opt++]);
+        fputs("\n-t only requires a palette file\n\n", stderr);
     }
 
-    if (ap < argc && strcmp(argv[ap], "-o") == 0) {
-        output_offset = 1;
-        ++ap;
+    fprintf(stderr,"Read palette %s \n", argv[optind]);
+    err = read_palette(argv[optind]);
+    if (err)
+        return EXIT_FAILURE;
+
+    if (read_transparent) {
+        fprintf(stdout, "%s", transparent);
+    } else {
+
+        fprintf(stderr,"Read cel %s \n", argv[optind+1]);
+        err = convert_cel (argv[optind+1], argv[optind+2]);
+        if (err)
+            return EXIT_FAILURE;
     }
-
-    if (ap+3 == argc) {
-        palette_file = argv[ap];
-        input_file = argv[ap+1];
-        output_file = argv[ap+2];
+    return EXIT_SUCCESS;
+err:
+    switch (err) {
+        case -3: fputs("Missing output file\n", stderr);
+        case -2: fputs("Missing cel file\n", stderr);
+        case -1: fputs("Missing palette file\n", stderr);
     }
-    else {
-        fprintf(stderr, "Usage: cel2png (-d) (-t) (-o) <palette file> <cel file> <out file> \n");
-        return 1;
-    }
-
-    fprintf(stderr,"Read palette %s \n", palette_file);
-    err = read_palette (palette_file);
-    if (err) return 1;
-
-    fprintf(stderr,"Read cel %s \n", input_file);
-    err = convert_cel (input_file, output_file);
-    if (err) return 1;
-
-    fprintf(stderr,"Done \n");
-
-    return 0;
+    fprintf(stderr, "\nUsage: %s -t [-d [-d]] <palette_file> [<cel_file> <output file>]\n\n", argv[0]);
+    return EXIT_FAILURE;
 }
